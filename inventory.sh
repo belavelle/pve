@@ -7,7 +7,7 @@ PVE_TEMPLATE_STORAGE="local"
 PVE_TEMPLATE_FLAVOR=""
 # Optional: Set your template to just "debian-12" or leave empty and let the script pick.
 # Optional: if you want to pin an exact template filename, set PVE_OSTEMPLATE explicitly.
-# PVE_OSTEMPLATE="local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
+PVE_OSTEMPLATE="${PVE_OSTEMPLATE:-}"
 
 SERVICES=(
   "neo4j:201:neo4j:dhcp"
