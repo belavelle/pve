@@ -4,7 +4,7 @@ set -Eeuo pipefail
 REPO_RAW_BASE_DEFAULT="https://raw.githubusercontent.com/belavelle/VM-Helper-Scripts/main/pve-stacks"
 REPO_RAW_BASE="${REPO_RAW_BASE:-$REPO_RAW_BASE_DEFAULT}"
 
-DOMAIN_DEFAULT="lavellenet.duckdns.org"
+DOMAIN_DEFAULT="duckdns.org"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
 FORCE_HTTP="${FORCE_HTTP:-1}"
 
