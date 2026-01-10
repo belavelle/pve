@@ -287,17 +287,17 @@ pve_ensure_template() {
   pveam update >/dev/null 2>&1 || die "pveam update failed"
   local tmpl_name
   tmpl_name="$(pve_get_latest_template_name "$flavor")"
-  log "Found template name: '$tmpl_name' (length: ${#tmpl_name})"
+  log "Found template name: '$tmpl_name' (length: ${#tmpl_name})" >&2
   [[ -n "$tmpl_name" ]] || die "Could not find an available template for flavor '$flavor' via pveam"
 
   # Download if missing
   local ost="${tmpl_storage}:vztmpl/${tmpl_name}"
-  log "Constructed ostemplate: '$ost' (length: ${#ost})"
+  log "Constructed ostemplate: '$ost' (length: ${#ost})" >&2
   if ! pve_template_exists "$ost"; then
-    log "Downloading LXC template: $tmpl_name to storage '$tmpl_storage'"
+    log "Downloading LXC template: $tmpl_name to storage '$tmpl_storage'" >&2
     pveam download "$tmpl_storage" "$tmpl_name" || die "pveam download failed"
   else
-    log "Template already present: $ost"
+    log "Template already present: $ost" >&2
   fi
 
   echo "$ost"
