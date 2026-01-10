@@ -162,7 +162,9 @@ pve_ct_create_privileged() {
   if [[ -z "${PVE_TEMPLATE_FLAVOR:-}" ]]; then
     PVE_TEMPLATE_FLAVOR="debian-12"
   fi
+  log "Template params: storage='$PVE_TEMPLATE_STORAGE', flavor='$PVE_TEMPLATE_FLAVOR', ostemplate='$ostemplate'"
   ostemplate="$(pve_ensure_template "$PVE_TEMPLATE_STORAGE" "$PVE_TEMPLATE_FLAVOR" "$ostemplate")"
+  log "Resolved ostemplate: '$ostemplate' (length: ${#ostemplate})"
 
   pve_storage_exists "$storage" || die "Storage '$storage' not found"
   maxkeys_check
@@ -255,11 +257,15 @@ pve_get_latest_template_name() {
   # arg: flavor like "debian-12"
   local flavor="$1"
   # returns something like: debian-12-standard_12.2-1_amd64.tar.zst
-  pveam available --section system 2>/dev/null \
+  local result
+  result="$(pveam available --section system 2>/dev/null \
     | awk '{print $2}' \
     | grep -E "^${flavor}-standard_.*_amd64\\.tar\\.(gz|zst)$" \
     | sort -V \
-    | tail -n 1
+    | tail -n 1)"
+  # Trim any whitespace
+  result="$(echo "$result" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  echo "$result"
 }
 
 pve_ensure_template() {
@@ -281,10 +287,12 @@ pve_ensure_template() {
   pveam update >/dev/null 2>&1 || die "pveam update failed"
   local tmpl_name
   tmpl_name="$(pve_get_latest_template_name "$flavor")"
+  log "Found template name: '$tmpl_name' (length: ${#tmpl_name})"
   [[ -n "$tmpl_name" ]] || die "Could not find an available template for flavor '$flavor' via pveam"
 
   # Download if missing
   local ost="${tmpl_storage}:vztmpl/${tmpl_name}"
+  log "Constructed ostemplate: '$ost' (length: ${#ost})"
   if ! pve_template_exists "$ost"; then
     log "Downloading LXC template: $tmpl_name to storage '$tmpl_storage'"
     pveam download "$tmpl_storage" "$tmpl_name" || die "pveam download failed"
@@ -294,4 +302,3 @@ pve_ensure_template() {
 
   echo "$ost"
 }
-
