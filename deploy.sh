@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_RAW_BASE_DEFAULT="https://raw.githubusercontent.com/belavelle/pve/refs/heads/main"
+REPO_RAW_BASE_DEFAULT="https://raw.githubusercontent.com/belavelle/pve/refs/headsmain"
 REPO_RAW_BASE="${REPO_RAW_BASE:-$REPO_RAW_BASE_DEFAULT}"
 
 DOMAIN_DEFAULT="duckdns.org"
@@ -42,6 +42,7 @@ deploy_one() {
   fi
 
   pve_ct_ensure_started "$ct"
+  ct_set_root_password "$ct" "${PVE_ROOT_PASSWORD:-}"
   ct_install_base_tools "$ct"
   ct_install_docker_debian "$ct"
 
@@ -54,6 +55,30 @@ deploy_one() {
   fi
 
   ct_stack_up "$ct" "$stack_dir"
+}
+
+destroy_one() {
+  local svc="$1" ct="$2"
+  
+  validate_service_name "$svc"
+  validate_ct_id "$ct"
+  
+  if ! pve_ct_exists "$ct"; then
+    warn "Service $svc (CT $ct) does not exist, skipping"
+    return 0
+  fi
+  
+  warn "About to destroy service: $svc (CT $ct)"
+  warn "All data and volumes will be permanently removed!"
+  echo -n "Are you sure? (yes/no): "
+  read -r response
+  
+  if [[ "$response" != "yes" ]]; then
+    log "Skipping $svc (CT $ct)"
+    return 0
+  fi
+  
+  pve_ct_destroy "$ct"
 }
 
 render_caddyfile() {
@@ -91,8 +116,22 @@ EOF
 
 main() {
   [[ $# -gt 0 ]] || exit 1
+  
   if [[ "$1" == "render-caddy" ]]; then
     render_caddyfile
+    exit 0
+  fi
+  
+  if [[ "$1" == "destroy" ]]; then
+    shift
+    [[ $# -gt 0 ]] || die "Usage: $0 destroy <service|all>"
+    
+    for arg in "$@"; do
+      for entry in "${SERVICES[@]}"; do
+        IFS=: read -r svc ct host ip <<<"$entry"
+        [[ "$svc" == "$arg" || "$arg" == "all" ]] && destroy_one "$svc" "$ct"
+      done
+    done
     exit 0
   fi
 
