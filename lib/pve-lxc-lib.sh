@@ -295,7 +295,7 @@ pve_ensure_template() {
   log "Constructed ostemplate: '$ost' (length: ${#ost})" >&2
   if ! pve_template_exists "$ost"; then
     log "Downloading LXC template: $tmpl_name to storage '$tmpl_storage'" >&2
-    pveam download "$tmpl_storage" "$tmpl_name" || die "pveam download failed"
+    pveam download "$tmpl_storage" "$tmpl_name" >&2 || die "pveam download failed"
   else
     log "Template already present: $ost" >&2
   fi
