@@ -131,6 +131,25 @@ pve_ct_ensure_started() {
   fi
 }
 
+pve_ct_destroy() {
+  local ct="$1"
+  
+  validate_ct_id "$ct"
+  
+  if ! pve_ct_exists "$ct"; then
+    warn "CT $ct does not exist, skipping"
+    return 0
+  fi
+  
+  log "Stopping CT $ct"
+  pct stop "$ct" 2>/dev/null || true
+  sleep 2
+  
+  log "Destroying CT $ct (including all data and volumes)"
+  pct destroy "$ct" --purge 1 || die "Failed to destroy CT $ct"
+  log "CT $ct has been destroyed"
+}
+
 ###############################################################################
 # CT creation (FIXED: positional params ≥ 10)
 ###############################################################################
@@ -162,9 +181,7 @@ pve_ct_create_privileged() {
   if [[ -z "${PVE_TEMPLATE_FLAVOR:-}" ]]; then
     PVE_TEMPLATE_FLAVOR="debian-12"
   fi
-  log "Template params: storage='$PVE_TEMPLATE_STORAGE', flavor='$PVE_TEMPLATE_FLAVOR', ostemplate='$ostemplate'"
   ostemplate="$(pve_ensure_template "$PVE_TEMPLATE_STORAGE" "$PVE_TEMPLATE_FLAVOR" "$ostemplate")"
-  log "Resolved ostemplate: '$ostemplate' (length: ${#ostemplate})"
 
   pve_storage_exists "$storage" || die "Storage '$storage' not found"
   maxkeys_check
@@ -193,6 +210,19 @@ pve_ct_create_privileged() {
 ###############################################################################
 # Common CT setup helpers
 ###############################################################################
+ct_set_root_password() {
+  local ct="$1"
+  local password="${2:-}"
+  
+  if [[ -z "$password" ]]; then
+    warn "No root password provided for CT $ct - root account remains locked"
+    return 0
+  fi
+  
+  log "Setting root password for CT $ct"
+  pct_exec "$ct" "echo 'root:${password}' | chpasswd"
+}
+
 ct_install_base_tools() {
   local ct="$1"
   pct_exec "$ct" "apt-get update -y"
@@ -287,12 +317,10 @@ pve_ensure_template() {
   pveam update >/dev/null 2>&1 || die "pveam update failed"
   local tmpl_name
   tmpl_name="$(pve_get_latest_template_name "$flavor")"
-  log "Found template name: '$tmpl_name' (length: ${#tmpl_name})" >&2
   [[ -n "$tmpl_name" ]] || die "Could not find an available template for flavor '$flavor' via pveam"
 
   # Download if missing
   local ost="${tmpl_storage}:vztmpl/${tmpl_name}"
-  log "Constructed ostemplate: '$ost' (length: ${#ost})" >&2
   if ! pve_template_exists "$ost"; then
     log "Downloading LXC template: $tmpl_name to storage '$tmpl_storage'" >&2
     pveam download "$tmpl_storage" "$tmpl_name" 1>&2 || die "pveam download failed"
