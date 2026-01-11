@@ -367,4 +367,3 @@ pve_ensure_template() {
   # Only output the template path to stdout, everything else to stderr
   echo "$ost"
 }
-

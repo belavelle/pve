@@ -9,10 +9,6 @@ PVE_TEMPLATE_FLAVOR=""
 # Optional: if you want to pin an exact template filename, set PVE_OSTEMPLATE explicitly.
 PVE_OSTEMPLATE="${PVE_OSTEMPLATE:-}"
 
-# Optional: Set root password for containers (can also use environment variable)
-# PVE_ROOT_PASSWORD="your-secure-password"
-# Or export it: export PVE_ROOT_PASSWORD="your-secure-password"
-
 SERVICES=(
   "neo4j:201:neo4j:dhcp"
   "searxng:202:searxng:dhcp"
