@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_RAW_BASE_DEFAULT="https://raw.githubusercontent.com/belavelle/VM-Helper-Scripts/main/pve-stacks"
+REPO_RAW_BASE_DEFAULT="https://raw.githubusercontent.com/belavelle/pve/refs/heads/main"
 REPO_RAW_BASE="${REPO_RAW_BASE:-$REPO_RAW_BASE_DEFAULT}"
 
-DOMAIN_DEFAULT="lavellenet.duckdns.org"
+DOMAIN_DEFAULT="duckdns.org"
 DOMAIN="${DOMAIN:-$DOMAIN_DEFAULT}"
 FORCE_HTTP="${FORCE_HTTP:-1}"
 
@@ -42,6 +42,7 @@ deploy_one() {
   fi
 
   pve_ct_ensure_started "$ct"
+  ct_set_root_password "$ct" "${PVE_ROOT_PASSWORD:-}"
   ct_install_base_tools "$ct"
   ct_install_docker_debian "$ct"
 
@@ -54,6 +55,70 @@ deploy_one() {
   fi
 
   ct_stack_up "$ct" "$stack_dir"
+}
+
+destroy_one() {
+  local svc="$1" ct="$2"
+  
+  validate_service_name "$svc"
+  validate_ct_id "$ct"
+  pve_require_base_cmds
+  
+  if ! pve_ct_exists "$ct"; then
+    warn "Service $svc (CT $ct) does not exist, skipping"
+    return 0
+  fi
+  
+  warn "About to destroy service: $svc (CT $ct)"
+  warn "All data and volumes will be permanently removed!"
+  echo -n "Are you sure? (yes/no): "
+  read -r response
+  
+  if [[ "$response" != "yes" ]]; then
+    log "Skipping $svc (CT $ct)"
+    return 0
+  fi
+  
+  pve_ct_destroy "$ct"
+}
+
+status_one() {
+  local svc="$1" ct="$2"
+  local status ip uptime stats cpu mem
+  
+  status="$(pve_ct_get_status "$ct")"
+  
+  if [[ "$status" == "not-found" ]]; then
+    printf "%-10s %-4s %-8s %-15s %-6s %-12s %-10s\n" "$svc" "$ct" "missing" "-" "-" "-" "-"
+    return 0
+  fi
+  
+  if [[ "$status" == "running" ]]; then
+    ip="$(pve_ct_get_ipv4 "$ct" || echo "-")"
+    uptime="$(pve_ct_get_uptime "$ct")"
+    stats="$(pve_ct_get_stats "$ct")"
+    cpu="${stats%%|*}"
+    mem="${stats##*|}"
+  else
+    ip="-"
+    uptime="-"
+    cpu="-"
+    mem="-"
+  fi
+  
+  printf "%-10s %-4s %-8s %-15s %-6s %-12s %-10s\n" "$svc" "$ct" "$status" "$ip" "$cpu" "$mem" "$uptime"
+}
+
+show_status() {
+  pve_require_base_cmds
+  
+  printf "%-10s %-4s %-8s %-15s %-6s %-12s %-10s\n" "SERVICE" "CT" "STATUS" "IP" "CPU" "MEMORY" "UPTIME"
+  printf "%-10s %-4s %-8s %-15s %-6s %-12s %-10s\n" "----------" "----" "--------" "---------------" "------" "------------" "----------"
+  
+  for entry in "${SERVICES[@]}"; do
+    IFS=: read -r svc ct host ip <<<"$entry"
+    status_one "$svc" "$ct"
+  done
 }
 
 render_caddyfile() {
@@ -91,8 +156,27 @@ EOF
 
 main() {
   [[ $# -gt 0 ]] || exit 1
+  
   if [[ "$1" == "render-caddy" ]]; then
     render_caddyfile
+    exit 0
+  fi
+  
+  if [[ "$1" == "status" ]]; then
+    show_status
+    exit 0
+  fi
+  
+  if [[ "$1" == "destroy" ]]; then
+    shift
+    [[ $# -gt 0 ]] || die "Usage: $0 destroy <service|all>"
+    
+    for arg in "$@"; do
+      for entry in "${SERVICES[@]}"; do
+        IFS=: read -r svc ct host ip <<<"$entry"
+        [[ "$svc" == "$arg" || "$arg" == "all" ]] && destroy_one "$svc" "$ct"
+      done
+    done
     exit 0
   fi
 

@@ -131,6 +131,25 @@ pve_ct_ensure_started() {
   fi
 }
 
+pve_ct_destroy() {
+  local ct="$1"
+  
+  validate_ct_id "$ct"
+  
+  if ! pve_ct_exists "$ct"; then
+    warn "CT $ct does not exist, skipping"
+    return 0
+  fi
+  
+  log "Stopping CT $ct"
+  pct stop "$ct" 2>/dev/null || true
+  sleep 2
+  
+  log "Destroying CT $ct (including all data and volumes)"
+  pct destroy "$ct" --purge 1 || die "Failed to destroy CT $ct"
+  log "CT $ct has been destroyed"
+}
+
 ###############################################################################
 # CT creation (FIXED: positional params ≥ 10)
 ###############################################################################
@@ -191,6 +210,19 @@ pve_ct_create_privileged() {
 ###############################################################################
 # Common CT setup helpers
 ###############################################################################
+ct_set_root_password() {
+  local ct="$1"
+  local password="${2:-}"
+  
+  if [[ -z "$password" ]]; then
+    warn "No root password provided for CT $ct - root account remains locked"
+    return 0
+  fi
+  
+  log "Setting root password for CT $ct"
+  pct_exec "$ct" "echo 'root:${password}' | chpasswd"
+}
+
 ct_install_base_tools() {
   local ct="$1"
   pct_exec "$ct" "apt-get update -y"
@@ -243,6 +275,42 @@ pve_ct_get_ipv4() {
   return 1
 }
 
+pve_ct_get_status() {
+  local ct="$1"
+  if ! pve_ct_exists "$ct"; then
+    echo "not-found"
+    return 0
+  fi
+  pct status "$ct" 2>/dev/null | awk '{print $2}'
+}
+
+pve_ct_get_uptime() {
+  local ct="$1"
+  if ! pve_ct_running "$ct"; then
+    echo "-"
+    return 0
+  fi
+  local uptime
+  uptime="$(pct_exec "$ct" "uptime -p" 2>/dev/null | sed 's/up //' || echo "-")"
+  echo "$uptime"
+}
+
+pve_ct_get_stats() {
+  local ct="$1"
+  if ! pve_ct_running "$ct"; then
+    echo "-|-"
+    return 0
+  fi
+  
+  local mem_info cpu_info
+  mem_info="$(pct exec "$ct" -- bash -c "free -m | awk '/^Mem:/ {printf \"%dM/%dM\", \$3, \$2}'" 2>/dev/null || echo "-")"
+  cpu_info="$(pct exec "$ct" -- bash -c "top -bn1 | grep 'Cpu(s)' | awk '{print \$2}' | cut -d'%' -f1" 2>/dev/null || echo "-")"
+  
+  [[ -n "$cpu_info" && "$cpu_info" != "-" ]] && cpu_info="${cpu_info}%"
+  
+  echo "${cpu_info}|${mem_info}"
+}
+
 pve_template_exists() {
   # arg: ostemplate like "local:vztmpl/debian-12-standard_12.2-1_amd64.tar.zst"
   local ost="$1"
@@ -255,11 +323,15 @@ pve_get_latest_template_name() {
   # arg: flavor like "debian-12"
   local flavor="$1"
   # returns something like: debian-12-standard_12.2-1_amd64.tar.zst
-  pveam available --section system 2>/dev/null \
+  local result
+  result="$(pveam available --section system 2>/dev/null \
     | awk '{print $2}' \
     | grep -E "^${flavor}-standard_.*_amd64\\.tar\\.(gz|zst)$" \
     | sort -V \
-    | tail -n 1
+    | tail -n 1)"
+  # Trim any whitespace
+  result="$(echo "$result" | tr -d '\n\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  echo "$result"
 }
 
 pve_ensure_template() {
@@ -286,12 +358,13 @@ pve_ensure_template() {
   # Download if missing
   local ost="${tmpl_storage}:vztmpl/${tmpl_name}"
   if ! pve_template_exists "$ost"; then
-    log "Downloading LXC template: $tmpl_name to storage '$tmpl_storage'"
-    pveam download "$tmpl_storage" "$tmpl_name" || die "pveam download failed"
+    log "Downloading LXC template: $tmpl_name to storage '$tmpl_storage'" >&2
+    pveam download "$tmpl_storage" "$tmpl_name" 1>&2 || die "pveam download failed"
   else
-    log "Template already present: $ost"
+    log "Template already present: $ost" >&2
   fi
 
+  # Only output the template path to stdout, everything else to stderr
   echo "$ost"
 }
 
