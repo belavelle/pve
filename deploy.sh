@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-REPO_RAW_BASE_DEFAULT="https://raw.githubusercontent.com/belavelle/pve/refs/headsmain"
+REPO_RAW_BASE_DEFAULT="https://raw.githubusercontent.com/belavelle/pve/refs/heads/main"
 REPO_RAW_BASE="${REPO_RAW_BASE:-$REPO_RAW_BASE_DEFAULT}"
 
 DOMAIN_DEFAULT="duckdns.org"
