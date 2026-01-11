@@ -62,6 +62,7 @@ destroy_one() {
   
   validate_service_name "$svc"
   validate_ct_id "$ct"
+  pve_require_base_cmds
   
   if ! pve_ct_exists "$ct"; then
     warn "Service $svc (CT $ct) does not exist, skipping"
